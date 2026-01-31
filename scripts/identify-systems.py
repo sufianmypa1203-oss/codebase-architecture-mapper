@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Elite System Identifier v3.0
-- Granular Detection: Goes deeper into large folders
+Elite System Identifier v3.1 (Fixed)
+- Granular Detection: Finds REAL subsystems within large folders
 - Interactive Mode: Asks user for descriptions
 - Persistent Config: Saves to architecture-config.json
 - System Fingerprints: Detects real systems by file patterns
@@ -30,30 +30,23 @@ def log_info(msg): print(f"{Colors.BLUE}[INFO]{Colors.NC} {msg}", file=sys.stder
 def log_success(msg): print(f"{Colors.GREEN}[SUCCESS]{Colors.NC} {msg}", file=sys.stderr)
 def log_warn(msg): print(f"{Colors.YELLOW}[WARNING]{Colors.NC} {msg}", file=sys.stderr)
 def log_system(name, count): print(f"{Colors.MAGENTA}[SYSTEM]{Colors.NC} {name} ({count} files)", file=sys.stderr)
-def log_prompt(msg): print(f"{Colors.CYAN}[?]{Colors.NC} {msg}", file=sys.stderr)
 
 # === CONFIGURATION ===
 
 # Directories to skip entirely
 SKIP_DIRS = {'node_modules', '.git', 'dist', 'build', '.next', '__pycache__', 'venv', '.venv'}
 
-# Root directories to skip when naming (go one level deeper)
-ROOT_DIRS = {'src', 'app', 'lib', 'packages', 'apps', 'modules', 'core', 'source', 'main', 'features'}
+# Root directories to skip when naming
+ROOT_DIRS = {'src', 'app', 'lib', 'packages', 'apps', 'modules', 'core', 'source', 'main', 'features', 'pages', 'components', 'views'}
 
-# System fingerprint files (presence indicates a "real" system)
+# System fingerprint files
 FINGERPRINT_FILES = {'index.ts', 'index.tsx', 'index.js', 'types.ts', 'api.ts', 'service.ts', 'client.ts', '__init__.py', 'mod.rs'}
 
 # Minimum files to be a system
-MIN_SYSTEM_FILES = 3
-
-# Maximum files before splitting deeper
-MAX_FILES_BEFORE_SPLIT = 15
+MIN_SYSTEM_FILES = 2
 
 # Maximum systems before merging into "other"
-MAX_SYSTEMS = 20
-
-# Maximum depth to scan
-MAX_DEPTH = 3
+MAX_SYSTEMS = 25
 
 # Config file name
 CONFIG_FILE = 'architecture-config.json'
@@ -65,87 +58,95 @@ def has_system_fingerprint(files: list) -> bool:
     return bool(filenames & {f.lower() for f in FINGERPRINT_FILES})
 
 
-def get_folder_depth(path: str, root: str) -> int:
-    """Get how deep a folder is from root."""
-    rel = os.path.relpath(path, root)
-    return len(Path(rel).parts)
-
-
-def discover_systems_granular(files: list, root: str, max_depth: int = MAX_DEPTH) -> dict:
+def get_meaningful_name(path: str) -> str:
     """
-    Granular system discovery - goes deeper into large folders.
+    Extract a meaningful system name from a path.
+    
+    Strategy: Find the deepest directory that isn't a generic container.
+    For paths like:
+      - src/pages/p2p/logic.ts → "p2p"
+      - src/components/ui/Button.tsx → "ui" 
+      - src/features/flinks/api.ts → "flinks"
+      - src/utils/helpers.ts → "utils"
+    """
+    parts = Path(path).parts
+    
+    # Reverse to go deepest first
+    meaningful = None
+    for part in reversed(parts):
+        p = part.lower()
+        
+        # Skip hidden directories
+        if p.startswith('.'):
+            continue
+        
+        # Skip generic containers - we want their children
+        if p in ROOT_DIRS:
+            # If we already found something meaningful, use it
+            if meaningful:
+                return meaningful
+            # Otherwise keep looking
+            continue
+        
+        # This is a meaningful name
+        meaningful = p
+    
+    return meaningful or 'root'
+
+
+def discover_systems_v31(files: list, root: str) -> dict:
+    """
+    V3.1 FIXED: Bottom-up discovery that correctly finds subsystems.
+    
+    Strategy:
+    1. Group all files by their directory
+    2. For each directory, determine if it's a "leaf system" (contains files directly)
+    3. Group directories by their system name (extracted from path)
+    4. Aggregate files with the same system name
     """
     
-    # Group files by their directories
+    # Step 1: Group files by their immediate directory
     dir_files = defaultdict(list)
     for file in files:
         dir_path = file.get('directory', '.')
         dir_files[dir_path].append(file)
     
-    # Analyze each directory
+    # Step 2: For each directory, extract the best system name
+    system_candidates = defaultdict(lambda: {
+        'files': [],
+        'directories': set(),
+        'total_lines': 0,
+        'paths': set()
+    })
+    
+    for dir_path, file_list in dir_files.items():
+        # Get the system name for this directory
+        system_name = get_meaningful_name(dir_path)
+        
+        # Add files to this system
+        for f in file_list:
+            system_candidates[system_name]['files'].append(f['path'])
+            system_candidates[system_name]['total_lines'] += f.get('lines', 0)
+        
+        system_candidates[system_name]['directories'].add(dir_path)
+        system_candidates[system_name]['paths'].add(dir_path)
+    
+    # Step 3: Check for fingerprints and build final systems
     systems = {}
-    processed_dirs = set()
-    
-    # Sort by depth (shallowest first)
-    sorted_dirs = sorted(dir_files.keys(), key=lambda d: len(Path(d).parts))
-    
-    for dir_path in sorted_dirs:
-        # Skip if already covered by a parent system
-        if any(dir_path.startswith(p + '/') or dir_path == p for p in processed_dirs):
-            continue
+    for name, data in system_candidates.items():
+        has_fp = has_system_fingerprint(data['files'])
         
-        dir_file_list = dir_files[dir_path]
-        file_count = len(dir_file_list)
-        depth = get_folder_depth(dir_path, root) if root else len(Path(dir_path).parts)
-        
-        # Get the system name from path
-        parts = Path(dir_path).parts
-        system_name = None
-        
-        for part in parts:
-            if part.lower() not in ROOT_DIRS and not part.startswith('.') and part != '.':
-                system_name = part.lower()
-                break
-        
-        if not system_name:
-            system_name = 'root'
-        
-        # Decision: Should this be a system or should we go deeper?
-        has_fingerprint = has_system_fingerprint([f['path'] for f in dir_file_list])
-        
-        # Count files in subdirectories too
-        total_files_in_subtree = sum(
-            len(dir_files[d]) for d in dir_files 
-            if d.startswith(dir_path + '/') or d == dir_path
-        )
-        
-        # If large folder and not too deep, mark for splitting
-        if total_files_in_subtree > MAX_FILES_BEFORE_SPLIT and depth < max_depth:
-            # Don't register this as a system, let subdirectories be systems
-            continue
-        
-        # Register as a system
-        if system_name not in systems:
-            systems[system_name] = {
-                'name': system_name.replace('-', ' ').replace('_', ' ').title(),
-                'paths': [],
-                'files': [],
-                'directories': [],
-                'total_lines': 0,
-                'has_fingerprint': has_fingerprint,
-                'description': '',
-                'used_by': [],
-                'business_rules': []
-            }
-        
-        # Add files to system
-        for f in dir_file_list:
-            systems[system_name]['files'].append(f['path'])
-            systems[system_name]['total_lines'] += f.get('lines', 0)
-        
-        systems[system_name]['paths'].append(dir_path)
-        systems[system_name]['directories'].append(dir_path)
-        processed_dirs.add(dir_path)
+        systems[name] = {
+            'name': name.replace('-', ' ').replace('_', ' ').title(),
+            'paths': sorted(data['paths']),
+            'files': data['files'],
+            'directories': sorted(data['directories']),
+            'total_lines': data['total_lines'],
+            'has_fingerprint': has_fp,
+            'description': '',
+            'used_by': [],
+            'business_rules': []
+        }
     
     return systems
 
@@ -164,7 +165,7 @@ def load_config(config_path: Path) -> dict:
 def save_config(config: dict, config_path: Path) -> None:
     """Save architecture config."""
     config['last_updated'] = datetime.now().isoformat()
-    config['version'] = '3.0'
+    config['version'] = '3.1'
     
     with open(config_path, 'w') as f:
         json.dump(config, f, indent=2)
@@ -192,7 +193,6 @@ def interactive_prompt(systems: dict, existing_config: dict) -> dict:
         existing = existing_systems.get(sys_name, {})
         
         if existing.get('user_modified'):
-            # User has already configured this, skip
             log_info(f"Skipping {sys_name} (already configured)")
             sys_data['description'] = existing.get('description', '')
             sys_data['used_by'] = existing.get('used_by', [])
@@ -203,27 +203,22 @@ def interactive_prompt(systems: dict, existing_config: dict) -> dict:
         print(f"{Colors.BOLD}📦 {sys_data['name']}{Colors.NC} ({file_count} files)")
         print(f"   Location: {sys_data['paths'][0] if sys_data['paths'] else 'root'}")
         
-        # Show sample files
         sample_files = sys_data['files'][:3]
         if sample_files:
             print(f"   Files: {', '.join(Path(f).name for f in sample_files)}")
         
         print()
         
-        # Prompt for description
         try:
             desc = input(f"{Colors.CYAN}   What does this system DO? {Colors.NC}(Enter to skip): ").strip()
             sys_data['description'] = desc if desc else f"Auto-detected from {sys_data['paths'][0] if sys_data['paths'] else 'root'}"
             
-            # Prompt for used_by
             used_by = input(f"{Colors.CYAN}   Who/what uses it? {Colors.NC}(comma-separated, Enter to skip): ").strip()
             sys_data['used_by'] = [x.strip() for x in used_by.split(',') if x.strip()] if used_by else []
             
-            # Prompt for business rules
             rules = input(f"{Colors.CYAN}   Key business rules? {Colors.NC}(comma-separated, Enter to skip): ").strip()
             sys_data['business_rules'] = [x.strip() for x in rules.split(',') if x.strip()] if rules else []
             
-            # Mark as user modified if any input was given
             if desc or used_by or rules:
                 sys_data['user_modified'] = True
             
@@ -237,20 +232,18 @@ def interactive_prompt(systems: dict, existing_config: dict) -> dict:
 
 
 def identify_systems(scan_data: dict, interactive: bool = False, config_path: Path = None) -> dict:
-    """
-    Main system identification with granular detection.
-    """
+    """Main system identification with v3.1 fixed granular detection."""
     
     files = scan_data.get('files', [])
     root = scan_data.get('root', '.')
     
-    log_info(f"Analyzing {len(files)} files with granular detection...")
+    log_info(f"Analyzing {len(files)} files with v3.1 granular detection...")
     
     # Load existing config
     existing_config = load_config(config_path) if config_path else {}
     
-    # Step 1: Granular discovery
-    systems = discover_systems_granular(files, root)
+    # Step 1: Granular discovery (FIXED)
+    systems = discover_systems_v31(files, root)
     
     # Step 2: Merge small systems into "other"
     final_systems = {}
@@ -285,7 +278,6 @@ def identify_systems(scan_data: dict, interactive: bool = False, config_path: Pa
     if interactive:
         final_systems = interactive_prompt(final_systems, existing_config)
     else:
-        # Apply existing descriptions from config
         for sys_name, sys_data in final_systems.items():
             existing = existing_config.get('systems', {}).get(sys_name, {})
             if existing.get('description'):
@@ -297,15 +289,7 @@ def identify_systems(scan_data: dict, interactive: bool = False, config_path: Pa
             if existing.get('user_modified'):
                 sys_data['user_modified'] = True
     
-    # Step 4: Build dependency relationships from imports
-    # (Basic version - check if system names appear in import paths)
-    system_names = set(final_systems.keys())
-    
-    for sys_name, data in final_systems.items():
-        data['depends_on'] = []
-        data['imported_by'] = []
-    
-    # Step 5: Build final result
+    # Step 4: Build final result
     result_systems = {}
     for name, data in final_systems.items():
         result_systems[name] = {
@@ -313,10 +297,10 @@ def identify_systems(scan_data: dict, interactive: bool = False, config_path: Pa
             'description': data.get('description') or f"Auto-detected from {data['paths'][0] if data['paths'] else 'root'}",
             'file_count': len(data['files']),
             'total_lines': data['total_lines'],
-            'directories': sorted(set(data['directories'])),
+            'directories': sorted(set(data['directories'])) if data.get('directories') else [],
             'files': sorted(data['files']),
-            'depends_on': data.get('depends_on', []),
-            'imported_by': data.get('imported_by', []),
+            'depends_on': [],
+            'imported_by': [],
             'used_by': data.get('used_by', []),
             'business_rules': data.get('business_rules', []),
             'has_fingerprint': data.get('has_fingerprint', False),
@@ -328,7 +312,7 @@ def identify_systems(scan_data: dict, interactive: bool = False, config_path: Pa
     # Save config if path provided
     if config_path:
         config = {
-            'version': '3.0',
+            'version': '3.1',
             'last_scan': datetime.now().isoformat(),
             'root': root,
             'systems': result_systems
@@ -341,7 +325,7 @@ def identify_systems(scan_data: dict, interactive: bool = False, config_path: Pa
             'total_systems': len(result_systems),
             'total_files': sum(s['file_count'] for s in result_systems.values()),
             'total_lines': sum(s['total_lines'] for s in result_systems.values()),
-            'discovery_method': 'granular_v3'
+            'discovery_method': 'granular_v3.1_fixed'
         },
         'scan_data': {
             'root': root,
@@ -354,7 +338,7 @@ def main():
     import argparse
     
     parser = argparse.ArgumentParser(
-        description='Elite System Identifier v3.0 - Granular detection with interactive mode'
+        description='Elite System Identifier v3.1 - Fixed granular detection'
     )
     parser.add_argument('input', help='Scan results JSON file (or - for stdin)')
     parser.add_argument('output', nargs='?', help='Output JSON file (optional)')
@@ -362,8 +346,6 @@ def main():
                         help='Enable interactive mode to configure systems')
     parser.add_argument('-c', '--config', default=CONFIG_FILE,
                         help=f'Config file path (default: {CONFIG_FILE})')
-    parser.add_argument('--depth', type=int, default=MAX_DEPTH,
-                        help=f'Max scan depth (default: {MAX_DEPTH})')
     
     args = parser.parse_args()
     

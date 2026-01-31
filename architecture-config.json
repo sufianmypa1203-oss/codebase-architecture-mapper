@@ -1,13 +1,37 @@
 {
-  "version": "3.0",
-  "last_scan": "2026-01-31T04:47:24.315587",
+  "version": "3.1",
+  "last_scan": "2026-01-31T05:11:32.173945",
   "root": "/Users/sufian/my skills/production/codebase-architecture-mapper",
   "systems": {
+    "systems": {
+      "name": "Systems",
+      "description": "Auto-detected from examples/example-output/systems",
+      "file_count": 7,
+      "total_lines": 402,
+      "directories": [
+        "examples/example-output/systems"
+      ],
+      "files": [
+        "examples/example-output/systems/api.md",
+        "examples/example-output/systems/auth.md",
+        "examples/example-output/systems/dashboard.md",
+        "examples/example-output/systems/p2p.md",
+        "examples/example-output/systems/supabase.md",
+        "examples/example-output/systems/ui.md",
+        "examples/example-output/systems/utils.md"
+      ],
+      "depends_on": [],
+      "imported_by": [],
+      "used_by": [],
+      "business_rules": [],
+      "has_fingerprint": false,
+      "user_modified": false
+    },
     "scripts": {
       "name": "Scripts",
       "description": "Auto-detected from scripts",
       "file_count": 4,
-      "total_lines": 1015,
+      "total_lines": 982,
       "directories": [
         "scripts"
       ],
@@ -24,15 +48,33 @@
       "has_fingerprint": false,
       "user_modified": false
     },
-    "other": {
-      "name": "Other",
-      "description": "Miscellaneous files not belonging to a major system",
+    "root": {
+      "name": "Root",
+      "description": "Auto-detected from .",
       "file_count": 3,
-      "total_lines": 435,
-      "directories": [],
+      "total_lines": 431,
+      "directories": [
+        "."
+      ],
       "files": [
         "README.md",
         "SKILL.md",
+        "architecture-config.json"
+      ],
+      "depends_on": [],
+      "imported_by": [],
+      "used_by": [],
+      "business_rules": [],
+      "has_fingerprint": false,
+      "user_modified": false
+    },
+    "other": {
+      "name": "Other",
+      "description": "Miscellaneous files not belonging to a major system",
+      "file_count": 1,
+      "total_lines": 65,
+      "directories": [],
+      "files": [
         "examples/example-output/OVERVIEW.md"
       ],
       "depends_on": [],
@@ -43,5 +85,5 @@
       "user_modified": false
     }
   },
-  "last_updated": "2026-01-31T04:47:24.315591"
+  "last_updated": "2026-01-31T05:11:32.173950"
 }
