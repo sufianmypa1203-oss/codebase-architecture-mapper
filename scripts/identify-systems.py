@@ -36,8 +36,12 @@ def log_system(name, count): print(f"{Colors.MAGENTA}[SYSTEM]{Colors.NC} {name} 
 # Directories to skip entirely during scanning
 SKIP_DIRS = {'node_modules', '.git', 'dist', 'build', '.next', '__pycache__', 'venv', '.venv', 'coverage'}
 
+# System names to SKIP (false positives from structural folders)
+SKIP_SYSTEMS = {'systems', 'src', 'docs', 'example-output', 'examples', 'dist', 'build'}
+
 # Container directories - we want to look INSIDE these for subsystems
 # These are "boring" structural folders, not features
+# NOTE: hooks, routes, config, functions are NOT containers - they ARE systems
 CONTAINER_DIRS = {
     # Source roots
     'src', 'app', 'lib', 'packages', 'apps', 'modules', 'core', 'source', 'main',
@@ -45,14 +49,23 @@ CONTAINER_DIRS = {
     'features', 'pages', 'components', 'views', 'screens',
     # Data/logic layers
     'data', 'services', 'api', 'backend', 'frontend', 'server', 'client',
-    # Infrastructure
-    'supabase', 'prisma', 'functions', 'migrations',
+    # Infrastructure containers (but NOT the leaf folders)
+    'supabase', 'prisma',
     # Common structural
-    'hooks', 'utils', 'helpers', 'types', 'models', 'schemas', 'routes', 'config',
+    'utils', 'helpers', 'types', 'models', 'schemas',
     # UI structure
-    'ui', 'common', 'shared', 'layout', 'layouts', 'guards', 'states', 'store',
+    'ui', 'common', 'shared', 'layout', 'layouts', 'store',
     # Assets
-    'assets', 'public', 'static', 'images', 'styles', 'css'
+    'assets', 'public', 'static', 'images', 'styles', 'css',
+    # Documentation
+    'docs', 'documentation', 'architecture'
+}
+
+# Systems that should ALWAYS be detected even if they're in CONTAINER_DIRS
+# (These are removed from CONTAINER_DIRS so they become leaf systems)
+FORCE_SYSTEM_NAMES = {
+    'hooks', 'routes', 'config', 'functions', 'migrations',
+    'contexts', 'transactions', 'guards', 'states'
 }
 
 # System fingerprint files (presence STRONGLY indicates a real system)
@@ -62,10 +75,11 @@ FINGERPRINT_FILES = {'index.ts', 'index.tsx', 'index.js', 'types.ts', 'api.ts', 
 MIN_SYSTEM_FILES = 2
 
 # Maximum systems before merging into "other"
-MAX_SYSTEMS = 30
+MAX_SYSTEMS = 35
 
 # Config file name
 CONFIG_FILE = 'architecture-config.json'
+
 
 
 def has_system_fingerprint(files: list) -> bool:
@@ -74,22 +88,23 @@ def has_system_fingerprint(files: list) -> bool:
     return bool(filenames & {f.lower() for f in FINGERPRINT_FILES})
 
 
-def get_system_name_v32(dir_path: str) -> str:
+def get_system_name_v33(dir_path: str) -> str:
     """
-    V3.2 IMPROVED: Extract meaningful system name from directory path.
+    V3.3 POLISHED: Extract meaningful system name from directory path.
     
     Strategy:
     1. Walk from DEEPEST to SHALLOWEST
-    2. Skip all container directories
-    3. Return the first non-container name found
-    4. If all are containers, use the deepest one (e.g., "hooks" is still a system)
+    2. If folder is in FORCE_SYSTEM_NAMES, return it immediately
+    3. Skip all container directories
+    4. Return the first non-container name found
+    5. If all are containers, use the deepest one
     
     Examples:
     - src/data/p2p/ → "p2p" (data is container, p2p is feature)
     - src/pages/debts/credit-cards/ → "credit-cards" (pages, debts are containers)
-    - src/hooks/ → "hooks" (even though it's in CONTAINER_DIRS, it IS the system)
+    - src/hooks/ → "hooks" (FORCED as system)
+    - supabase/functions/ → "functions" (FORCED as system)
     - backend/services/classification/ → "classification"
-    - supabase/functions/ → "functions"
     """
     parts = Path(dir_path).parts
     
@@ -105,6 +120,10 @@ def get_system_name_v32(dir_path: str) -> str:
         # Skip hidden directories
         if p.startswith('.'):
             continue
+        
+        # If in FORCE_SYSTEM_NAMES, this IS a system - return immediately
+        if p in FORCE_SYSTEM_NAMES:
+            return p
         
         # Is this a container?
         if p in CONTAINER_DIRS:
@@ -144,7 +163,11 @@ def discover_systems_v32(files: list, root: str) -> dict:
     })
     
     for dir_path, file_list in dir_files.items():
-        system_name = get_system_name_v32(dir_path)
+        system_name = get_system_name_v33(dir_path)
+        
+        # Skip false positive system names
+        if system_name in SKIP_SYSTEMS:
+            continue
         
         for f in file_list:
             system_candidates[system_name]['files'].append(f['path'])
