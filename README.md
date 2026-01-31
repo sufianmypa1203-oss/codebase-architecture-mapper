@@ -1,6 +1,6 @@
 # 🏗️ Codebase Architecture Mapper
 
-[![Version](https://img.shields.io/badge/version-3.0.0-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-3.3.0-blue.svg)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Quality](https://img.shields.io/badge/quality-Elite%20Grade-gold.svg)]()
 
@@ -10,12 +10,12 @@
 
 ## What This Does
 
-- ✅ **Granular Detection** - Goes deep into large folders to find real systems
+- ✅ **Granular Detection** - Bottom-up discovery finds REAL subsystems in deep folders
 - ✅ **Interactive Mode** - Asks you for descriptions and business rules
 - ✅ **Persistent Config** - Saves your answers to `architecture-config.json`
 - ✅ **Auto-discovery** - Works on ANY codebase without configuration
 - ✅ **Mermaid Diagrams** - Visual system maps, data flow, dependencies
-- ✅ **Business Context** - Documents who uses each system and key rules
+- ✅ **Elite Synergy** - Integrates with [Smart PR Docs](https://github.com/sufianmypa1203-oss/smart-pr-docs) for system-aware PRs
 
 ## Quick Start
 
@@ -148,10 +148,15 @@ Peer-to-peer lending system
 | Files | 18 |
 | Lines | 2,340 |
 
-## Dependencies
-**Depends On:** Supabase, Auth
-**Used By:** Dashboard
-```
+## 🤝 Elite Synergy: Architecture + PRs
+
+This skill is designed to work in perfect harmony with **[Smart PR Docs](https://github.com/sufianmypa1203-oss/smart-pr-docs)**.
+
+When both are installed:
+1. **Mapper** provides the "Global Vision" (Systems & Business Rules).
+2. **PR Docs** reads that vision and automatically enriches your PR reports with architectural context.
+
+**The result?** Your PRs don't just show code—they show **systemic impact**.
 
 ## License
 
