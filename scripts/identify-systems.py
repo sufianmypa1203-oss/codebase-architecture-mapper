@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-Elite System Identifier v3.1 (Fixed)
-- Granular Detection: Finds REAL subsystems within large folders
+Elite System Identifier v3.2
+- FIXED: Expanded container detection for nested feature folders
+- Detects subsystems inside data/, backend/, services/, etc.
 - Interactive Mode: Asks user for descriptions
 - Persistent Config: Saves to architecture-config.json
-- System Fingerprints: Detects real systems by file patterns
 """
 
 import os
@@ -33,20 +33,36 @@ def log_system(name, count): print(f"{Colors.MAGENTA}[SYSTEM]{Colors.NC} {name} 
 
 # === CONFIGURATION ===
 
-# Directories to skip entirely
-SKIP_DIRS = {'node_modules', '.git', 'dist', 'build', '.next', '__pycache__', 'venv', '.venv'}
+# Directories to skip entirely during scanning
+SKIP_DIRS = {'node_modules', '.git', 'dist', 'build', '.next', '__pycache__', 'venv', '.venv', 'coverage'}
 
-# Root directories to skip when naming
-ROOT_DIRS = {'src', 'app', 'lib', 'packages', 'apps', 'modules', 'core', 'source', 'main', 'features', 'pages', 'components', 'views'}
+# Container directories - we want to look INSIDE these for subsystems
+# These are "boring" structural folders, not features
+CONTAINER_DIRS = {
+    # Source roots
+    'src', 'app', 'lib', 'packages', 'apps', 'modules', 'core', 'source', 'main',
+    # Feature containers  
+    'features', 'pages', 'components', 'views', 'screens',
+    # Data/logic layers
+    'data', 'services', 'api', 'backend', 'frontend', 'server', 'client',
+    # Infrastructure
+    'supabase', 'prisma', 'functions', 'migrations',
+    # Common structural
+    'hooks', 'utils', 'helpers', 'types', 'models', 'schemas', 'routes', 'config',
+    # UI structure
+    'ui', 'common', 'shared', 'layout', 'layouts', 'guards', 'states', 'store',
+    # Assets
+    'assets', 'public', 'static', 'images', 'styles', 'css'
+}
 
-# System fingerprint files
+# System fingerprint files (presence STRONGLY indicates a real system)
 FINGERPRINT_FILES = {'index.ts', 'index.tsx', 'index.js', 'types.ts', 'api.ts', 'service.ts', 'client.ts', '__init__.py', 'mod.rs'}
 
 # Minimum files to be a system
 MIN_SYSTEM_FILES = 2
 
 # Maximum systems before merging into "other"
-MAX_SYSTEMS = 25
+MAX_SYSTEMS = 30
 
 # Config file name
 CONFIG_FILE = 'architecture-config.json'
@@ -58,21 +74,31 @@ def has_system_fingerprint(files: list) -> bool:
     return bool(filenames & {f.lower() for f in FINGERPRINT_FILES})
 
 
-def get_meaningful_name(path: str) -> str:
+def get_system_name_v32(dir_path: str) -> str:
     """
-    Extract a meaningful system name from a path.
+    V3.2 IMPROVED: Extract meaningful system name from directory path.
     
-    Strategy: Find the deepest directory that isn't a generic container.
-    For paths like:
-      - src/pages/p2p/logic.ts → "p2p"
-      - src/components/ui/Button.tsx → "ui" 
-      - src/features/flinks/api.ts → "flinks"
-      - src/utils/helpers.ts → "utils"
+    Strategy:
+    1. Walk from DEEPEST to SHALLOWEST
+    2. Skip all container directories
+    3. Return the first non-container name found
+    4. If all are containers, use the deepest one (e.g., "hooks" is still a system)
+    
+    Examples:
+    - src/data/p2p/ → "p2p" (data is container, p2p is feature)
+    - src/pages/debts/credit-cards/ → "credit-cards" (pages, debts are containers)
+    - src/hooks/ → "hooks" (even though it's in CONTAINER_DIRS, it IS the system)
+    - backend/services/classification/ → "classification"
+    - supabase/functions/ → "functions"
     """
-    parts = Path(path).parts
+    parts = Path(dir_path).parts
     
-    # Reverse to go deepest first
-    meaningful = None
+    if not parts:
+        return 'root'
+    
+    # Walk from deepest to shallowest
+    deepest_container = None
+    
     for part in reversed(parts):
         p = part.lower()
         
@@ -80,61 +106,64 @@ def get_meaningful_name(path: str) -> str:
         if p.startswith('.'):
             continue
         
-        # Skip generic containers - we want their children
-        if p in ROOT_DIRS:
-            # If we already found something meaningful, use it
-            if meaningful:
-                return meaningful
-            # Otherwise keep looking
+        # Is this a container?
+        if p in CONTAINER_DIRS:
+            # Save as fallback (deepest container can be a system)
+            if deepest_container is None:
+                deepest_container = p
             continue
         
-        # This is a meaningful name
-        meaningful = p
+        # Found a non-container! This is our system name
+        return p
     
-    return meaningful or 'root'
+    # If we only found containers, use the deepest one
+    if deepest_container:
+        return deepest_container
+    
+    return 'root'
 
 
-def discover_systems_v31(files: list, root: str) -> dict:
+def discover_systems_v32(files: list, root: str) -> dict:
     """
-    V3.1 FIXED: Bottom-up discovery that correctly finds subsystems.
-    
-    Strategy:
-    1. Group all files by their directory
-    2. For each directory, determine if it's a "leaf system" (contains files directly)
-    3. Group directories by their system name (extracted from path)
-    4. Aggregate files with the same system name
+    V3.2: Improved system discovery with better container detection.
     """
     
-    # Step 1: Group files by their immediate directory
+    # Group files by their immediate directory
     dir_files = defaultdict(list)
     for file in files:
         dir_path = file.get('directory', '.')
         dir_files[dir_path].append(file)
     
-    # Step 2: For each directory, extract the best system name
+    # For each directory, extract the best system name
     system_candidates = defaultdict(lambda: {
         'files': [],
         'directories': set(),
         'total_lines': 0,
-        'paths': set()
+        'paths': set(),
+        'sample_paths': []
     })
     
     for dir_path, file_list in dir_files.items():
-        # Get the system name for this directory
-        system_name = get_meaningful_name(dir_path)
+        system_name = get_system_name_v32(dir_path)
         
-        # Add files to this system
         for f in file_list:
             system_candidates[system_name]['files'].append(f['path'])
             system_candidates[system_name]['total_lines'] += f.get('lines', 0)
         
         system_candidates[system_name]['directories'].add(dir_path)
         system_candidates[system_name]['paths'].add(dir_path)
+        
+        # Keep a sample path for description
+        if len(system_candidates[system_name]['sample_paths']) < 3:
+            system_candidates[system_name]['sample_paths'].append(dir_path)
     
-    # Step 3: Check for fingerprints and build final systems
+    # Build final systems with fingerprint detection
     systems = {}
     for name, data in system_candidates.items():
         has_fp = has_system_fingerprint(data['files'])
+        
+        # Use the first sample path for description
+        sample_path = data['sample_paths'][0] if data['sample_paths'] else name
         
         systems[name] = {
             'name': name.replace('-', ' ').replace('_', ' ').title(),
@@ -143,7 +172,7 @@ def discover_systems_v31(files: list, root: str) -> dict:
             'directories': sorted(data['directories']),
             'total_lines': data['total_lines'],
             'has_fingerprint': has_fp,
-            'description': '',
+            'description': f"Auto-detected from {sample_path}",
             'used_by': [],
             'business_rules': []
         }
@@ -165,7 +194,7 @@ def load_config(config_path: Path) -> dict:
 def save_config(config: dict, config_path: Path) -> None:
     """Save architecture config."""
     config['last_updated'] = datetime.now().isoformat()
-    config['version'] = '3.1'
+    config['version'] = '3.2'
     
     with open(config_path, 'w') as f:
         json.dump(config, f, indent=2)
@@ -185,11 +214,9 @@ def interactive_prompt(systems: dict, existing_config: dict) -> dict:
     for sys_name, sys_data in sorted(systems.items(), key=lambda x: -len(x[1]['files'])):
         file_count = len(sys_data['files'])
         
-        # Skip "other" system
         if sys_name == 'other':
             continue
         
-        # Check if we have existing config for this system
         existing = existing_systems.get(sys_name, {})
         
         if existing.get('user_modified'):
@@ -211,7 +238,7 @@ def interactive_prompt(systems: dict, existing_config: dict) -> dict:
         
         try:
             desc = input(f"{Colors.CYAN}   What does this system DO? {Colors.NC}(Enter to skip): ").strip()
-            sys_data['description'] = desc if desc else f"Auto-detected from {sys_data['paths'][0] if sys_data['paths'] else 'root'}"
+            sys_data['description'] = desc if desc else sys_data.get('description', 'No description')
             
             used_by = input(f"{Colors.CYAN}   Who/what uses it? {Colors.NC}(comma-separated, Enter to skip): ").strip()
             sys_data['used_by'] = [x.strip() for x in used_by.split(',') if x.strip()] if used_by else []
@@ -232,18 +259,17 @@ def interactive_prompt(systems: dict, existing_config: dict) -> dict:
 
 
 def identify_systems(scan_data: dict, interactive: bool = False, config_path: Path = None) -> dict:
-    """Main system identification with v3.1 fixed granular detection."""
+    """Main system identification with v3.2 improved detection."""
     
     files = scan_data.get('files', [])
     root = scan_data.get('root', '.')
     
-    log_info(f"Analyzing {len(files)} files with v3.1 granular detection...")
+    log_info(f"Analyzing {len(files)} files with v3.2 detection...")
     
-    # Load existing config
     existing_config = load_config(config_path) if config_path else {}
     
-    # Step 1: Granular discovery (FIXED)
-    systems = discover_systems_v31(files, root)
+    # Step 1: Discover systems with v3.2 algorithm
+    systems = discover_systems_v32(files, root)
     
     # Step 2: Merge small systems into "other"
     final_systems = {}
@@ -294,10 +320,10 @@ def identify_systems(scan_data: dict, interactive: bool = False, config_path: Pa
     for name, data in final_systems.items():
         result_systems[name] = {
             'name': data['name'],
-            'description': data.get('description') or f"Auto-detected from {data['paths'][0] if data['paths'] else 'root'}",
+            'description': data.get('description', 'No description'),
             'file_count': len(data['files']),
             'total_lines': data['total_lines'],
-            'directories': sorted(set(data['directories'])) if data.get('directories') else [],
+            'directories': sorted(set(data.get('directories', []))),
             'files': sorted(data['files']),
             'depends_on': [],
             'imported_by': [],
@@ -309,10 +335,9 @@ def identify_systems(scan_data: dict, interactive: bool = False, config_path: Pa
     
     log_success(f"Discovered {len(result_systems)} systems")
     
-    # Save config if path provided
     if config_path:
         config = {
-            'version': '3.1',
+            'version': '3.2',
             'last_scan': datetime.now().isoformat(),
             'root': root,
             'systems': result_systems
@@ -325,7 +350,7 @@ def identify_systems(scan_data: dict, interactive: bool = False, config_path: Pa
             'total_systems': len(result_systems),
             'total_files': sum(s['file_count'] for s in result_systems.values()),
             'total_lines': sum(s['total_lines'] for s in result_systems.values()),
-            'discovery_method': 'granular_v3.1_fixed'
+            'discovery_method': 'granular_v3.2'
         },
         'scan_data': {
             'root': root,
@@ -338,7 +363,7 @@ def main():
     import argparse
     
     parser = argparse.ArgumentParser(
-        description='Elite System Identifier v3.1 - Fixed granular detection'
+        description='Elite System Identifier v3.2 - Improved container detection'
     )
     parser.add_argument('input', help='Scan results JSON file (or - for stdin)')
     parser.add_argument('output', nargs='?', help='Output JSON file (optional)')
@@ -349,25 +374,21 @@ def main():
     
     args = parser.parse_args()
     
-    # Read input
     if args.input == '-':
         scan_data = json.load(sys.stdin)
     else:
         with open(args.input, 'r') as f:
             scan_data = json.load(f)
     
-    # Determine config path
     root = scan_data.get('root', '.')
     config_path = Path(root) / args.config
     
-    # Identify systems
     result = identify_systems(
         scan_data, 
         interactive=args.interactive,
         config_path=config_path
     )
     
-    # Output
     if args.output:
         with open(args.output, 'w') as f:
             json.dump(result, f, indent=2)

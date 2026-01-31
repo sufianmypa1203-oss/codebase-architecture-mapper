@@ -1,6 +1,6 @@
 {
-  "version": "3.1",
-  "last_scan": "2026-01-31T05:11:32.173945",
+  "version": "3.2",
+  "last_scan": "2026-01-31T05:33:08.482617",
   "root": "/Users/sufian/my skills/production/codebase-architecture-mapper",
   "systems": {
     "systems": {
@@ -31,7 +31,7 @@
       "name": "Scripts",
       "description": "Auto-detected from scripts",
       "file_count": 4,
-      "total_lines": 982,
+      "total_lines": 1018,
       "directories": [
         "scripts"
       ],
@@ -52,7 +52,7 @@
       "name": "Root",
       "description": "Auto-detected from .",
       "file_count": 3,
-      "total_lines": 431,
+      "total_lines": 473,
       "directories": [
         "."
       ],
@@ -85,5 +85,5 @@
       "user_modified": false
     }
   },
-  "last_updated": "2026-01-31T05:11:32.173950"
+  "last_updated": "2026-01-31T05:33:08.482621"
 }
