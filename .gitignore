@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv
+venv/
+ENV/
+
+# Scan results
+scan-results.json
+systems.json
+/tmp/scan.json
+/tmp/systems.json
+
+# IDEs
+.vscode/
+.idea/
+.DS_Store
+
+# Temporary output
+examples/example-output/

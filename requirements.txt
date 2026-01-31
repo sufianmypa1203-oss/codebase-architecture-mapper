@@ -1,0 +1,8 @@
+# Python Dependencies for Codebase Architecture Mapper
+
+# No external dependencies required!
+# All scripts use Python standard library only.
+
+# Optional: For enhanced features
+# networkx>=3.0  # Graph analysis (if you want advanced dependency mapping)
+# gitpython>=3.1.40  # Git integration
