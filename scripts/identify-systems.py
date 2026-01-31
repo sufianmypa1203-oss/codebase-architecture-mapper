@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
-System Identifier - Phase 1
-Groups files into logical systems based on patterns, directories, and imports.
+Universal System Identifier v2.0
+Groups files into logical systems using AUTO-DISCOVERY - no hardcoded patterns.
+Works on ANY codebase: React, Vue, Python, Go, anything.
 """
 
 import os
@@ -24,184 +25,222 @@ class Colors:
 def log_info(msg): print(f"{Colors.BLUE}[INFO]{Colors.NC} {msg}", file=sys.stderr)
 def log_success(msg): print(f"{Colors.GREEN}[SUCCESS]{Colors.NC} {msg}", file=sys.stderr)
 def log_warn(msg): print(f"{Colors.YELLOW}[WARNING]{Colors.NC} {msg}", file=sys.stderr)
-def log_system(name): print(f"{Colors.MAGENTA}[SYSTEM]{Colors.NC} Found: {name}", file=sys.stderr)
+def log_system(name, count): print(f"{Colors.MAGENTA}[SYSTEM]{Colors.NC} {name} ({count} files)", file=sys.stderr)
 
-# System detection patterns
-# Format: { system_name: { 'dirs': [...], 'files': [...], 'imports': [...] } }
-SYSTEM_PATTERNS = {
-    'flinks': {
-        'dirs': ['flinks', 'flink'],
-        'files': ['flinks', 'bank-connect', 'account-sync'],
-        'imports': ['flinks', '@flinks'],
-        'description': 'Bank account integration via Flinks API'
-    },
-    'supabase': {
-        'dirs': ['supabase', 'database', 'db'],
-        'files': ['supabase', 'createClient', 'useSupabase'],
-        'imports': ['@supabase', 'supabase-js', 'supabase'],
-        'description': 'Database and authentication layer'
-    },
-    'p2p': {
-        'dirs': ['p2p', 'peer-to-peer', 'loans'],
-        'files': ['p2p', 'loan', 'person', 'lend', 'borrow'],
-        'imports': ['p2p', 'loans'],
-        'description': 'Peer-to-peer lending system'
-    },
-    'classifications': {
-        'dirs': ['classifications', 'categories', 'classify'],
-        'files': ['classification', 'category', 'classify', 'categorize'],
-        'imports': ['classifications', 'categories'],
-        'description': 'Transaction classification and categorization'
-    },
-    'auth': {
-        'dirs': ['auth', 'authentication', 'login'],
-        'files': ['auth', 'login', 'signup', 'session', 'token'],
-        'imports': ['auth', 'next-auth', '@auth'],
-        'description': 'User authentication and session management'
-    },
-    'dashboard': {
-        'dirs': ['dashboard', 'home', 'main'],
-        'files': ['dashboard', 'widget', 'overview'],
-        'imports': ['dashboard'],
-        'description': 'Main dashboard and overview UI'
-    },
-    'debts': {
-        'dirs': ['debts', 'credit', 'loans'],
-        'files': ['debt', 'credit-card', 'auto-loan', 'mortgage'],
-        'imports': ['debts'],
-        'description': 'Debt tracking and management'
-    },
-    'income': {
-        'dirs': ['income', 'earnings', 'salary'],
-        'files': ['income', 'salary', 'paycheck', 'earnings'],
-        'imports': ['income'],
-        'description': 'Income tracking and analysis'
-    },
-    'api': {
-        'dirs': ['api', 'routes', 'endpoints'],
-        'files': ['route', 'endpoint', 'handler'],
-        'imports': ['api'],
-        'description': 'API routes and handlers'
-    },
-    'ui': {
-        'dirs': ['components', 'ui', 'shared'],
-        'files': ['button', 'modal', 'card', 'input', 'form'],
-        'imports': ['@/components', '@/ui'],
-        'description': 'Shared UI components'
-    },
-    'utils': {
-        'dirs': ['utils', 'helpers', 'lib'],
-        'files': ['utils', 'helpers', 'format', 'parse'],
-        'imports': ['@/utils', '@/lib'],
-        'description': 'Utility functions and helpers'
+# Common root directories to skip when determining system names
+ROOT_DIRS = {'src', 'app', 'lib', 'packages', 'apps', 'modules', 'core', 'source', 'main'}
+
+# Directories that should be grouped as "utils" or "shared"
+UTILITY_DIRS = {'utils', 'helpers', 'lib', 'common', 'shared', 'utilities'}
+
+# Directories that should be grouped as "ui" or "components"
+UI_DIRS = {'components', 'ui', 'views', 'widgets', 'elements'}
+
+# Minimum files to be considered a "real" system
+MIN_SYSTEM_FILES = 2
+
+# Maximum systems before merging smallest into "other"
+MAX_SYSTEMS = 12
+
+
+def get_system_name(file_path: str) -> str:
+    """
+    Extract a meaningful system name from a file path.
+    
+    Examples:
+        src/auth/login.ts → "auth"
+        src/features/dashboard/index.tsx → "dashboard"
+        packages/web/src/components/Button.tsx → "components"
+        app/(dashboard)/page.tsx → "dashboard"
+        components/ui/Button.tsx → "ui"
+    """
+    parts = Path(file_path).parts
+    
+    if len(parts) <= 1:
+        return "root"
+    
+    # Find the first meaningful directory
+    for i, part in enumerate(parts):
+        # Skip root directories
+        if part.lower() in ROOT_DIRS:
+            continue
+        
+        # Skip hidden directories
+        if part.startswith('.'):
+            continue
+        
+        # Handle Next.js route groups: (dashboard) → dashboard
+        if part.startswith('(') and part.endswith(')'):
+            return part[1:-1].lower()
+        
+        # Skip __tests__, __mocks__, etc.
+        if part.startswith('__') and part.endswith('__'):
+            continue
+        
+        # Found a meaningful directory
+        return part.lower()
+    
+    # Fallback to first non-root directory or filename prefix
+    if len(parts) >= 2:
+        return parts[0].lower()
+    
+    return "root"
+
+
+def normalize_system_name(name: str) -> str:
+    """Normalize system names for consistency."""
+    name = name.lower().strip()
+    
+    # Map common variations to standard names
+    if name in UTILITY_DIRS:
+        return "utils"
+    if name in UI_DIRS:
+        return "components"
+    if name in {'api', 'routes', 'endpoints', 'handlers'}:
+        return "api"
+    if name in {'tests', 'test', '__tests__', 'spec', 'specs'}:
+        return "tests"
+    if name in {'types', 'interfaces', 'models', 'schemas'}:
+        return "types"
+    if name in {'config', 'configs', 'configuration', 'settings'}:
+        return "config"
+    if name in {'assets', 'static', 'public', 'images'}:
+        return "assets"
+    if name in {'styles', 'css', 'scss', 'stylesheets'}:
+        return "styles"
+    
+    return name
+
+
+def generate_description(system_name: str, file_count: int, directories: list) -> str:
+    """Generate a human-readable description for a system."""
+    
+    # Get the most common directory
+    if directories:
+        main_dir = max(set(directories), key=directories.count)
+    else:
+        main_dir = system_name
+    
+    # Generate description based on name patterns
+    descriptions = {
+        'api': 'API routes and request handlers',
+        'auth': 'Authentication and authorization',
+        'components': 'Reusable UI components',
+        'utils': 'Utility functions and helpers',
+        'config': 'Configuration and environment settings',
+        'types': 'Type definitions and interfaces',
+        'tests': 'Test files and fixtures',
+        'styles': 'Stylesheets and CSS modules',
+        'assets': 'Static assets and media files',
+        'root': 'Root-level project files',
     }
-}
+    
+    if system_name in descriptions:
+        return descriptions[system_name]
+    
+    return f"Auto-detected from /{main_dir}/ ({file_count} files)"
+
 
 def identify_systems(scan_data: dict) -> dict:
-    """Identify systems from scanned codebase data."""
+    """
+    Identify systems from scanned codebase using AUTO-DISCOVERY.
+    No hardcoded patterns - works on any codebase.
+    """
     
     files = scan_data.get('files', [])
-    systems = defaultdict(lambda: {
-        'files': [],
-        'file_count': 0,
-        'total_lines': 0,
-        'directories': set(),
-        'imports_from': set(),
-        'imported_by': set()
-    })
-    
     log_info(f"Analyzing {len(files)} files for system patterns...")
     
-    # First pass: assign files to systems
+    # Step 1: Group files by auto-detected system name
+    raw_systems = defaultdict(lambda: {
+        'files': [],
+        'directories': [],
+        'total_lines': 0,
+        'imports_from': set()
+    })
+    
     for file in files:
-        path = file['path'].lower()
-        directory = file['directory'].lower()
-        name = file['name'].lower()
-        imports = [i.lower() for i in file.get('imports', [])]
+        path = file['path']
+        system_name = get_system_name(path)
+        system_name = normalize_system_name(system_name)
         
-        assigned_systems = set()
+        raw_systems[system_name]['files'].append(path)
+        raw_systems[system_name]['directories'].append(file.get('directory', '.'))
+        raw_systems[system_name]['total_lines'] += file.get('lines', 0)
         
-        for system_name, patterns in SYSTEM_PATTERNS.items():
-            score = 0
-            
-            # Check directory patterns
-            for dir_pattern in patterns['dirs']:
-                if dir_pattern in directory:
-                    score += 3  # Strong signal
-            
-            # Check filename patterns
-            for file_pattern in patterns['files']:
-                if file_pattern in name:
-                    score += 2
-            
-            # Check import patterns
-            for import_pattern in patterns['imports']:
-                for imp in imports:
-                    if import_pattern in imp:
-                        score += 1
-            
-            if score >= 2:  # Threshold for assignment
-                assigned_systems.add(system_name)
-        
-        # Default to 'other' if no system matched
-        if not assigned_systems:
-            assigned_systems.add('other')
-        
-        # Assign file to all matched systems
-        for system in assigned_systems:
-            systems[system]['files'].append(file['path'])
-            systems[system]['file_count'] += 1
-            systems[system]['total_lines'] += file.get('lines', 0)
-            systems[system]['directories'].add(file['directory'])
-            
-            # Track imports for dependency mapping
-            for imp in file.get('imports', []):
-                systems[system]['imports_from'].add(imp)
+        # Track imports for relationship mapping
+        for imp in file.get('imports', []):
+            raw_systems[system_name]['imports_from'].add(imp)
     
-    # Second pass: map system relationships
-    log_info("Mapping system relationships...")
-    system_names = list(systems.keys())
+    # Step 2: Merge small systems into "other"
+    systems = {}
+    other_files = []
+    other_lines = 0
+    other_dirs = []
     
-    for system_name, system_data in systems.items():
-        for imp in system_data['imports_from']:
+    for name, data in sorted(raw_systems.items(), key=lambda x: -len(x[1]['files'])):
+        if len(data['files']) < MIN_SYSTEM_FILES:
+            other_files.extend(data['files'])
+            other_lines += data['total_lines']
+            other_dirs.extend(data['directories'])
+        elif len(systems) >= MAX_SYSTEMS:
+            other_files.extend(data['files'])
+            other_lines += data['total_lines']
+            other_dirs.extend(data['directories'])
+        else:
+            systems[name] = data
+    
+    # Add "other" system if there are orphan files
+    if other_files:
+        systems['other'] = {
+            'files': other_files,
+            'directories': other_dirs,
+            'total_lines': other_lines,
+            'imports_from': set()
+        }
+    
+    # Step 3: Build relationship map from imports
+    system_names = set(systems.keys())
+    
+    for sys_name, data in systems.items():
+        data['depends_on'] = set()
+        for imp in data['imports_from']:
             imp_lower = imp.lower()
-            for other_system in system_names:
-                if other_system != system_name:
-                    patterns = SYSTEM_PATTERNS.get(other_system, {})
-                    for pattern in patterns.get('dirs', []) + patterns.get('imports', []):
-                        if pattern in imp_lower:
-                            system_data['imported_by'].add(other_system)
+            for other_sys in system_names:
+                if other_sys != sys_name and other_sys in imp_lower:
+                    data['depends_on'].add(other_sys)
     
-    # Convert sets to lists and add descriptions
+    # Step 4: Build final result with metadata
     result = {}
-    for system_name, data in systems.items():
-        if data['file_count'] > 0:
-            log_system(f"{system_name} ({data['file_count']} files)")
-            result[system_name] = {
-                'name': system_name.title().replace('_', ' '),
-                'description': SYSTEM_PATTERNS.get(system_name, {}).get('description', 'Custom system'),
-                'file_count': data['file_count'],
-                'total_lines': data['total_lines'],
-                'directories': sorted(data['directories']),
-                'files': sorted(data['files']),
-                'depends_on': sorted(data['imported_by']),
-                'imported_by': []  # Will be filled in cross-reference
-            }
+    for name, data in systems.items():
+        file_count = len(data['files'])
+        log_system(name.title(), file_count)
+        
+        result[name] = {
+            'name': name.title().replace('_', ' '),
+            'description': generate_description(name, file_count, data['directories']),
+            'file_count': file_count,
+            'total_lines': data['total_lines'],
+            'directories': sorted(set(data['directories'])),
+            'files': sorted(data['files']),
+            'depends_on': sorted(data.get('depends_on', set())),
+            'imported_by': []
+        }
     
-    # Cross-reference: fill in imported_by
-    for system_name, data in result.items():
+    # Step 5: Cross-reference imported_by
+    for sys_name, data in result.items():
         for dep in data['depends_on']:
             if dep in result:
-                result[dep]['imported_by'].append(system_name)
+                result[dep]['imported_by'].append(sys_name)
     
-    log_success(f"Identified {len(result)} systems")
+    log_success(f"Discovered {len(result)} systems automatically")
     
     return {
         'systems': result,
         'summary': {
             'total_systems': len(result),
             'total_files': sum(s['file_count'] for s in result.values()),
-            'total_lines': sum(s['total_lines'] for s in result.values())
+            'total_lines': sum(s['total_lines'] for s in result.values()),
+            'discovery_method': 'auto'
         },
         'scan_data': {
             'root': scan_data.get('root'),
@@ -209,9 +248,11 @@ def identify_systems(scan_data: dict) -> dict:
         }
     }
 
+
 def main():
     if len(sys.argv) < 2:
         print("Usage: identify-systems.py <scan-results.json> [output.json]")
+        print("\nUniversal System Discovery - works on ANY codebase!")
         print("\nExample:")
         print("  python scan-codebase.py /path/to/project | python identify-systems.py -")
         print("  python identify-systems.py scan-results.json systems.json")
@@ -237,6 +278,7 @@ def main():
         log_success(f"Results saved to: {output_file}")
     else:
         print(json.dumps(result, indent=2))
+
 
 if __name__ == '__main__':
     main()

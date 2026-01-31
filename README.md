@@ -1,6 +1,6 @@
 # 🏗️ Codebase Architecture Mapper
 
-[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Quality](https://img.shields.io/badge/quality-Elite%20Grade-gold.svg)]()
 
@@ -68,20 +68,29 @@ your-project/
             └── dependency-map.mmd   # Dependencies
 ```
 
-## Systems It Detects
+## How It Works - Universal Auto-Discovery
 
-| System | Detection Pattern |
-|--------|-------------------|
-| Flinks | `/flinks/`, `FlinksConnect` |
-| Supabase | `/supabase/`, `createClient` |
-| P2P | `/p2p/`, `loan`, `person` |
-| Classifications | `classification`, `category` |
-| Auth | `/auth/`, `login`, `session` |
-| Dashboard | `/dashboard/`, `widget` |
-| Debts | `/debts/`, `credit-card` |
-| Income | `/income/`, `salary` |
-| API | `/api/`, `route` |
-| UI | `/components/`, `button` |
+**No configuration needed!** The tool automatically discovers systems from your actual codebase structure.
+
+### Detection Logic
+
+1. **Directory-Based**: Files in `src/auth/` → "Auth" system
+2. **Next.js Groups**: Files in `app/(dashboard)/` → "Dashboard" system  
+3. **Monorepo Support**: Files in `packages/web/` → "Web" system
+4. **Smart Merging**: Small folders (<2 files) merge into "Other"
+
+### Example Discovery
+
+```
+Your Project:
+src/
+├── auth/           → "Auth" system (8 files)
+├── payments/       → "Payments" system (12 files)
+├── components/     → "Components" system (45 files)
+└── utils/          → "Utils" system (15 files)
+```
+
+**Works on ANY codebase**: React, Vue, Angular, Python, Go, Rust, anything!
 
 ## Scripts
 
