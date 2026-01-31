@@ -1,6 +1,6 @@
 # 🏗️ Codebase Architecture Mapper
 
-[![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-3.0.0-blue.svg)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Quality](https://img.shields.io/badge/quality-Elite%20Grade-gold.svg)]()
 
@@ -10,11 +10,12 @@
 
 ## What This Does
 
-- ✅ **Scans entire codebase** - Recursively analyzes all files
-- ✅ **Identifies systems** - Groups files into logical systems (Flinks, Supabase, P2P, etc.)
-- ✅ **Maps relationships** - Shows which systems depend on each other
-- ✅ **Generates docs** - Creates organized `docs/architecture/` folder
-- ✅ **Creates diagrams** - Mermaid visualizations of system relationships
+- ✅ **Granular Detection** - Goes deep into large folders to find real systems
+- ✅ **Interactive Mode** - Asks you for descriptions and business rules
+- ✅ **Persistent Config** - Saves your answers to `architecture-config.json`
+- ✅ **Auto-discovery** - Works on ANY codebase without configuration
+- ✅ **Mermaid Diagrams** - Visual system maps, data flow, dependencies
+- ✅ **Business Context** - Documents who uses each system and key rules
 
 ## Quick Start
 
@@ -22,6 +23,19 @@
 
 - Python 3.8+
 - A git-based project to scan
+
+### Interactive Mode (Recommended)
+
+```bash
+# Scan your project with interactive prompts
+python scan-codebase.py /path/to/project > scan.json
+python identify-systems.py scan.json --interactive
+```
+
+This will ask you for each system:
+- What does it do?
+- Who uses it?
+- Key business rules?
 
 ### Installation
 

@@ -1,0 +1,47 @@
+{
+  "version": "3.0",
+  "last_scan": "2026-01-31T04:47:24.315587",
+  "root": "/Users/sufian/my skills/production/codebase-architecture-mapper",
+  "systems": {
+    "scripts": {
+      "name": "Scripts",
+      "description": "Auto-detected from scripts",
+      "file_count": 4,
+      "total_lines": 1015,
+      "directories": [
+        "scripts"
+      ],
+      "files": [
+        "scripts/generate-diagrams.py",
+        "scripts/generate-docs.py",
+        "scripts/identify-systems.py",
+        "scripts/scan-codebase.py"
+      ],
+      "depends_on": [],
+      "imported_by": [],
+      "used_by": [],
+      "business_rules": [],
+      "has_fingerprint": false,
+      "user_modified": false
+    },
+    "other": {
+      "name": "Other",
+      "description": "Miscellaneous files not belonging to a major system",
+      "file_count": 3,
+      "total_lines": 435,
+      "directories": [],
+      "files": [
+        "README.md",
+        "SKILL.md",
+        "examples/example-output/OVERVIEW.md"
+      ],
+      "depends_on": [],
+      "imported_by": [],
+      "used_by": [],
+      "business_rules": [],
+      "has_fingerprint": false,
+      "user_modified": false
+    }
+  },
+  "last_updated": "2026-01-31T04:47:24.315591"
+}

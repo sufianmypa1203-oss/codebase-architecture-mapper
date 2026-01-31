@@ -119,14 +119,14 @@ def generate_overview(data: dict, output_dir: Path) -> None:
     log_success(f"Created: {overview_path}")
 
 def generate_system_doc(name: str, sys_data: dict, output_dir: Path) -> None:
-    """Generate documentation for a single system."""
+    """Generate documentation for a single system with full business context."""
     
     if name == 'other':
         return
     
     # Group files by directory
     files_by_dir = {}
-    for file_path in sys_data.get('files', [])[:50]:  # Limit to 50 files
+    for file_path in sys_data.get('files', [])[:50]:
         dir_name = str(Path(file_path).parent)
         if dir_name not in files_by_dir:
             files_by_dir[dir_name] = []
@@ -135,24 +135,43 @@ def generate_system_doc(name: str, sys_data: dict, output_dir: Path) -> None:
     # Build file table
     file_rows = []
     for dir_name, files in sorted(files_by_dir.items()):
-        for f in files[:10]:  # Limit per directory
+        for f in files[:10]:
             file_rows.append(f"| `{dir_name}/{f}` |")
     
     # Build dependency info
     depends_on = sys_data.get('depends_on', [])
     imported_by = sys_data.get('imported_by', [])
+    used_by = sys_data.get('used_by', [])
+    business_rules = sys_data.get('business_rules', [])
     
     depends_str = ', '.join([f"[{d.title()}]({d}.md)" for d in depends_on]) if depends_on else 'None'
     imported_str = ', '.join([f"[{i.title()}]({i}.md)" for i in imported_by]) if imported_by else 'None'
+    used_by_str = ', '.join(used_by) if used_by else 'Not specified'
+    
+    # Build business rules section
+    rules_section = ""
+    if business_rules:
+        rules_section = "\n## ⚠️ Business Rules\n\n"
+        for rule in business_rules:
+            rules_section += f"> **{rule}**\n>\n"
+    
+    # Build used_by section
+    used_by_section = ""
+    if used_by:
+        used_by_section = f"\n**Consumers:** {used_by_str}\n"
+    
+    # Fingerprint badge
+    fingerprint_badge = "✅ Core System" if sys_data.get('has_fingerprint') else "📁 Directory Group"
     
     content = f"""# {sys_data['name']} System
 
-> Last Updated: {datetime.now().strftime('%Y-%m-%d')}
+> Last Updated: {datetime.now().strftime('%Y-%m-%d')} | {fingerprint_badge}
 
 ## Overview
 
 {sys_data.get('description', 'No description available.')}
-
+{used_by_section}
+{rules_section}
 ## Statistics
 
 | Metric | Value |
@@ -180,7 +199,7 @@ def generate_system_doc(name: str, sys_data: dict, output_dir: Path) -> None:
 | File |
 |------|
 """
-    content += '\n'.join(file_rows[:20])  # Limit to 20 files
+    content += '\n'.join(file_rows[:20])
     
     if sys_data.get('file_count', 0) > 20:
         content += f"\n\n*...and {sys_data['file_count'] - 20} more files*"
